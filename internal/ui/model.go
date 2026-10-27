@@ -25,6 +25,7 @@ type TickMsg time.Time
 
 type Model struct {
 	collector *metrics.Collector
+	version   string
 	theme     Theme
 
 	width  int
@@ -56,9 +57,13 @@ type SystemSnapshotWrapper struct {
 	gpuHistory  []float64
 }
 
-func NewModel(collector *metrics.Collector) Model {
+func NewModel(collector *metrics.Collector, version string) Model {
+	if version == "" {
+		version = "dev"
+	}
 	return Model{
 		collector: collector,
+		version:   version,
 		theme:     DefaultTheme(),
 		sortBy:    SortByCPU,
 		sortAsc:   false,
@@ -301,10 +306,14 @@ func (m Model) View() string {
 }
 
 func (m Model) renderHeader() string {
+	ver := m.version
+	if ver == "" {
+		ver = "dev"
+	}
 	title := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("#bd93f9")).
-		Render("⬢ wintop")
+		Render(fmt.Sprintf("⬢ wintop %s", ver))
 
 	infoStyle := lipgloss.NewStyle().Foreground(m.theme.TextMuted)
 	valStyle := lipgloss.NewStyle().Foreground(m.theme.TextSecondary).Bold(true)

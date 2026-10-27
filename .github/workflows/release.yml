@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Semantic Version
+        id: versioning
+        uses: paulhatch/semantic-version@v5.4.0
+        with:
+          tag_prefix: "v"
+          major_pattern: "(BREAKING|major)"
+          minor_pattern: "feat"
+          patch_pattern: "fix"
+          version_format: "${major}.${minor}.${patch}"
+          bump_each_commit: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build Executable
+        shell: pwsh
+        run: |
+          $ver = "v${{ steps.versioning.outputs.version }}"
+          Write-Host "Building wintop version $ver"
+          go build -ldflags="-s -w -X main.version=$ver" -o wintop.exe .
+          .\wintop.exe --version
+
+      - name: Package Artifacts
+        shell: pwsh
+        run: |
+          $ver = "v${{ steps.versioning.outputs.version }}"
+          $archive = "wintop-${ver}-windows-amd64.zip"
+          Compress-Archive -Path "wintop.exe", "README.md", "LICENSE" -DestinationPath $archive
+          
+          # Generate SHA256 Checksums
+          $hashExe = (Get-FileHash -Algorithm SHA256 "wintop.exe").Hash.ToLower()
+          $hashZip = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+          
+          "$hashExe  wintop.exe`n$hashZip  $archive" | Out-File -Encoding utf8 "checksums.txt"
+
+      - name: Push Git Tag
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.versioning.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if (-not (git tag -l $tag)) {
+            Write-Host "Creating tag $tag"
+            git tag -a $tag -m "Release $tag"
+            git push origin $tag
+          } else {
+            Write-Host "Tag $tag already exists"
+          }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.versioning.outputs.version }}"
+          name: "wintop v${{ steps.versioning.outputs.version }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            wintop.exe
+            wintop-v${{ steps.versioning.outputs.version }}-windows-amd64.zip
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

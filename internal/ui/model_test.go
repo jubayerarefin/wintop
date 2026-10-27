@@ -11,7 +11,7 @@ import (
 
 func TestModelView(t *testing.T) {
 	c := metrics.NewCollector(30)
-	var m tea.Model = NewModel(c)
+	var m tea.Model = NewModel(c, "v0.1.0")
 
 	// Simulate window size
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 35})
