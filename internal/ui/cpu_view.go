@@ -25,7 +25,17 @@ func (m Model) renderCPUBox(width, height int) string {
 	displayName := snap.CPUName
 	displayName = strings.ReplaceAll(displayName, " 8-Core Processor", "")
 	displayName = strings.ReplaceAll(displayName, " Processor", "")
-	cpuName := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(truncate(displayName, 22))
+	displayName = strings.TrimSpace(displayName)
+
+	var topoStr string
+	if snap.CPUPhysicalCores > 0 && snap.CPULogicalCores > 0 {
+		topoStr = fmt.Sprintf("(%dC/%dT)", snap.CPUPhysicalCores, snap.CPULogicalCores)
+	} else if snap.CPUCores > 0 {
+		topoStr = fmt.Sprintf("(%dC)", snap.CPUCores)
+	}
+
+	cpuName := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(truncate(displayName, 18))
+	topoStyled := lipgloss.NewStyle().Foreground(m.theme.TextSecondary).Render(topoStr)
 
 	pctColor := m.theme.MeterGreen
 	if snap.CPUTotalPct > 60 {
@@ -38,24 +48,73 @@ func (m Model) renderCPUBox(width, height int) string {
 
 	var headerParts []string
 	headerParts = append(headerParts, title, cpuName)
+	if topoStr != "" {
+		headerParts = append(headerParts, topoStyled)
+	}
 
 	if snap.CPUPowerWatts > 0 {
 		pwrStr := lipgloss.NewStyle().Foreground(m.theme.MeterYellow).Render(fmt.Sprintf("%.1f W", snap.CPUPowerWatts))
 		headerParts = append(headerParts, pwrStr)
+	} else {
+		headerParts = append(headerParts, lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("PWR: --"))
 	}
+
 	if snap.CPUFanRPM > 0 {
 		fanStr := lipgloss.NewStyle().Foreground(m.theme.TextSecondary).Render(fmt.Sprintf("%d RPM", snap.CPUFanRPM))
 		headerParts = append(headerParts, fanStr)
+	} else {
+		headerParts = append(headerParts, lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render("FAN: N/A"))
 	}
-	headerParts = append(headerParts, totalPctStr)
 
+	headerParts = append(headerParts, totalPctStr)
 	header := strings.Join(headerParts, " ")
 
 	// Available vertical space for content inside box
 	remH := innerH - 1
 
-	// Braille Graph
-	graphH := remH / 2
+	// Determine column layout for all CPU cores/threads
+	totalCores := len(snap.CPUCoresPct)
+	numCols := 1
+	if textW >= 50 && totalCores >= 4 {
+		numCols = 4
+	} else if textW >= 28 && totalCores >= 2 {
+		numCols = 2
+	}
+
+	var coreLines []string
+	if totalCores > 0 {
+		rowsNeeded := (totalCores + numCols - 1) / numCols
+		maxRows := remH - 2 // Leave at least 2 rows for graph
+		if maxRows < 1 {
+			maxRows = 1
+		}
+		rowsToDisplay := rowsNeeded
+		if rowsToDisplay > maxRows {
+			rowsToDisplay = maxRows
+		}
+
+		colWidth := (textW - (numCols - 1)) / numCols
+		barWidth := colWidth - 9
+		if barWidth < 2 {
+			barWidth = 2
+		}
+
+		for r := 0; r < rowsToDisplay; r++ {
+			var colStrs []string
+			for c := 0; c < numCols; c++ {
+				idx := r + c*rowsNeeded
+				if idx < totalCores {
+					colStrs = append(colStrs, formatCoreBar(idx, snap.CPUCoresPct[idx], barWidth, m.theme))
+				} else {
+					colStrs = append(colStrs, strings.Repeat(" ", colWidth))
+				}
+			}
+			coreLines = append(coreLines, strings.Join(colStrs, " "))
+		}
+	}
+
+	// Braille Graph occupies remaining space
+	graphH := remH - len(coreLines)
 	if graphH < 2 {
 		graphH = 2
 	}
@@ -67,35 +126,6 @@ func (m Model) renderCPUBox(width, height int) string {
 	canvas := NewBrailleCanvas(graphW, graphH)
 	canvas.RenderAreaGraph(m.snapshot.cpuHistory, 100.0)
 	graphStr := lipgloss.NewStyle().Foreground(m.theme.GraphCPU).Render(canvas.String())
-
-	// Mini core bars
-	coresRemH := remH - graphH - 1
-	var coreLines []string
-	if coresRemH > 0 && len(snap.CPUCoresPct) > 0 {
-		halfCores := (len(snap.CPUCoresPct) + 1) / 2
-		coreLinesToDisplay := coresRemH
-		if coreLinesToDisplay > halfCores {
-			coreLinesToDisplay = halfCores
-		}
-
-		colWidth := (textW - 2) / 2
-		barWidth := colWidth - 14
-		if barWidth < 3 {
-			barWidth = 3
-		}
-
-		for line := 0; line < coreLinesToDisplay; line++ {
-			c1 := line
-			c2 := line + halfCores
-
-			str1 := formatCoreBar(c1, snap.CPUCoresPct[c1], barWidth, m.theme)
-			str2 := ""
-			if c2 < len(snap.CPUCoresPct) {
-				str2 = formatCoreBar(c2, snap.CPUCoresPct[c2], barWidth, m.theme)
-			}
-			coreLines = append(coreLines, fmt.Sprintf("%-*s  %s", colWidth, str1, str2))
-		}
-	}
 
 	content := header + "\n" + graphStr
 	if len(coreLines) > 0 {

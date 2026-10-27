@@ -39,15 +39,17 @@ type DiskInfo struct {
 
 // SystemSnapshot contains a point-in-time snapshot of the system.
 type SystemSnapshot struct {
-	Uptime        uint64
-	Hostname      string
-	OSName        string
-	CPUName       string
-	CPUCores      int
-	CPUTotalPct   float64
-	CPUCoresPct   []float64
-	CPUPowerWatts float64
-	CPUFanRPM     uint32
+	Uptime           uint64
+	Hostname         string
+	OSName           string
+	CPUName          string
+	CPUCores         int // Physical cores (e.g. 8)
+	CPUPhysicalCores int // Physical cores (e.g. 8)
+	CPULogicalCores  int // Logical cores / threads (e.g. 16)
+	CPUTotalPct      float64
+	CPUCoresPct      []float64
+	CPUPowerWatts    float64
+	CPUFanRPM        uint32
 
 	MemTotal       uint64
 	MemUsed        uint64
@@ -166,12 +168,15 @@ func (c *Collector) collect() {
 		snap.OSName = fmt.Sprintf("%s %s", hInfo.Platform, hInfo.PlatformVersion)
 	}
 
-	// CPU info
+	// CPU info & core counts
 	if cInfos, err := cpu.Info(); err == nil && len(cInfos) > 0 {
 		snap.CPUName = cInfos[0].ModelName
 	}
-	if logicalCores, err := cpu.Counts(true); err == nil && logicalCores > 0 {
-		snap.CPUCores = logicalCores
+	if physical, err := cpu.Counts(false); err == nil && physical > 0 {
+		snap.CPUPhysicalCores = physical
+	}
+	if logical, err := cpu.Counts(true); err == nil && logical > 0 {
+		snap.CPULogicalCores = logical
 	}
 
 	// CPU Percentages (total and per-core)
@@ -180,10 +185,15 @@ func (c *Collector) collect() {
 	}
 	if corePcts, err := cpu.Percent(0, true); err == nil {
 		snap.CPUCoresPct = corePcts
-		if snap.CPUCores == 0 {
-			snap.CPUCores = len(corePcts)
+		if snap.CPULogicalCores == 0 {
+			snap.CPULogicalCores = len(corePcts)
 		}
 	}
+
+	if snap.CPUPhysicalCores == 0 {
+		snap.CPUPhysicalCores = snap.CPULogicalCores
+	}
+	snap.CPUCores = snap.CPUPhysicalCores
 
 	// CPU Power & Fan RPM
 	if c.cpuPower != nil {

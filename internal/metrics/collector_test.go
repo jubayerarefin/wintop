@@ -13,9 +13,15 @@ func TestMetricsCollector(t *testing.T) {
 	if snap.OSName == "" {
 		t.Log("Warning: OSName is empty")
 	}
-	t.Logf("Snapshot collected successfully: OS=%s, Host=%s, CPU=%s, Cores=%d, TotalCPU=%.1f%%, RAM=%.1f%%, Procs=%d, GPUs=%d",
-		snap.OSName, snap.Hostname, snap.CPUName, snap.CPUCores, snap.CPUTotalPct, snap.MemUsedPercent, len(snap.Processes), len(snap.GPUs))
+	t.Logf("Snapshot collected successfully: OS=%s, Host=%s, CPU=%s, PhysicalCores=%d, LogicalCores=%d, TotalCPU=%.1f%%, RAM=%.1f%%, Procs=%d, GPUs=%d",
+		snap.OSName, snap.Hostname, snap.CPUName, snap.CPUPhysicalCores, snap.CPULogicalCores, snap.CPUTotalPct, snap.MemUsedPercent, len(snap.Processes), len(snap.GPUs))
 
+	if snap.CPUPhysicalCores <= 0 {
+		t.Fatalf("expected physical cores > 0, got %d", snap.CPUPhysicalCores)
+	}
+	if snap.CPULogicalCores < snap.CPUPhysicalCores {
+		t.Fatalf("expected logical cores >= physical cores, got %d < %d", snap.CPULogicalCores, snap.CPUPhysicalCores)
+	}
 	if len(cpuHist) == 0 {
 		t.Fatal("expected at least one cpu history point")
 	}
