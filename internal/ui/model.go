@@ -246,15 +246,15 @@ func (m Model) View() string {
 	var cpuH, gpuH, memH, netH int
 
 	if hasGPU {
-		cpuH = (mainH * 30) / 100
+		cpuH = (mainH * 28) / 100
 		if cpuH < 6 {
 			cpuH = 6
 		}
-		gpuH = (mainH * 24) / 100
-		if gpuH < 5 {
-			gpuH = 5
+		gpuH = (mainH * 28) / 100
+		if gpuH < 7 {
+			gpuH = 7
 		}
-		memH = (mainH * 26) / 100
+		memH = (mainH * 24) / 100
 		if memH < 6 {
 			memH = 6
 		}

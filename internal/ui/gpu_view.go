@@ -52,10 +52,10 @@ func (m Model) renderGPUBox(width, height int) string {
 	// Available space
 	remH := innerH - 1
 
-	// Meters: PROC %, VRAM, FAN %
-	barW := textW - 32
-	if barW < 5 {
-		barW = 5
+	// Meters: PROC %, VRAM, FAN (%, RPM), PWR (W, Limit)
+	barW := textW - 34
+	if barW < 4 {
+		barW = 4
 	}
 
 	procLbl := lipgloss.NewStyle().Foreground(m.theme.GraphGPU).Bold(true).Render("PROC")
@@ -75,12 +75,37 @@ func (m Model) renderGPUBox(width, height int) string {
 
 	fanLbl := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Bold(true).Render("FAN ")
 	fanBar := RenderProgressBar(gpu.FanSpeedPct, barW, m.theme)
-	fanVal := lipgloss.NewStyle().Foreground(m.theme.TextPrimary).Render(fmt.Sprintf("%5.1f%%", gpu.FanSpeedPct))
+	var fanValStr string
+	if gpu.FanSpeedRPM > 0 {
+		fanValStr = fmt.Sprintf("%3.0f%% (%d RPM)", gpu.FanSpeedPct, gpu.FanSpeedRPM)
+	} else {
+		fanValStr = fmt.Sprintf("%5.1f%%", gpu.FanSpeedPct)
+	}
+	fanVal := lipgloss.NewStyle().Foreground(m.theme.TextPrimary).Render(fanValStr)
 	fanLine := fmt.Sprintf("%s %s %s", fanLbl, fanBar, fanVal)
 
-	meters := []string{procLine, vramLine, fanLine}
+	var meters []string
+	meters = append(meters, procLine, vramLine, fanLine)
 
-	// If we have enough vertical space, render a Braille graph for GPU processing %
+	// Power Line (Watts & Limit)
+	if gpu.PowerWatts > 0 {
+		pwrLbl := lipgloss.NewStyle().Foreground(m.theme.MeterYellow).Bold(true).Render("PWR ")
+		var pwrPct float64
+		if gpu.PowerLimitW > 0 {
+			pwrPct = (gpu.PowerWatts / gpu.PowerLimitW) * 100.0
+		}
+		pwrBar := RenderProgressBar(pwrPct, barW, m.theme)
+		var pwrValStr string
+		if gpu.PowerLimitW > 0 {
+			pwrValStr = fmt.Sprintf("%.1f W / %.0f W", gpu.PowerWatts, gpu.PowerLimitW)
+		} else {
+			pwrValStr = fmt.Sprintf("%.1f W", gpu.PowerWatts)
+		}
+		pwrVal := lipgloss.NewStyle().Foreground(m.theme.TextPrimary).Render(pwrValStr)
+		meters = append(meters, fmt.Sprintf("%s %s %s", pwrLbl, pwrBar, pwrVal))
+	}
+
+	// If enough vertical space, render a Braille graph for GPU processing %
 	graphH := remH - len(meters)
 	var contentLines []string
 	contentLines = append(contentLines, header)
