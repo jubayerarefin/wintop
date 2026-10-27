@@ -63,6 +63,8 @@ type SystemSnapshot struct {
 	NetTotalRecv       uint64
 	NetTotalSent       uint64
 
+	GPUs []GPUInfo
+
 	Processes []ProcessInfo
 }
 
@@ -73,6 +75,7 @@ type Collector struct {
 	cpuHistory   []float64
 	netRecvHist  []float64
 	netSentHist  []float64
+	gpuHistory   []float64
 	historyLimit int
 
 	prevNetTime time.Time
@@ -92,6 +95,7 @@ func NewCollector(historyLimit int) *Collector {
 		cpuHistory:   make([]float64, 0, historyLimit),
 		netRecvHist:  make([]float64, 0, historyLimit),
 		netSentHist:  make([]float64, 0, historyLimit),
+		gpuHistory:   make([]float64, 0, historyLimit),
 		stopChan:     make(chan struct{}),
 	}
 }
@@ -125,7 +129,7 @@ func (c *Collector) Stop() {
 }
 
 // GetSnapshot returns a copy of the current snapshot and history.
-func (c *Collector) GetSnapshot() (SystemSnapshot, []float64, []float64, []float64) {
+func (c *Collector) GetSnapshot() (SystemSnapshot, []float64, []float64, []float64, []float64) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -138,7 +142,10 @@ func (c *Collector) GetSnapshot() (SystemSnapshot, []float64, []float64, []float
 	netSentCopy := make([]float64, len(c.netSentHist))
 	copy(netSentCopy, c.netSentHist)
 
-	return c.snapshot, cpuCopy, netRecvCopy, netSentCopy
+	gpuCopy := make([]float64, len(c.gpuHistory))
+	copy(gpuCopy, c.gpuHistory)
+
+	return c.snapshot, cpuCopy, netRecvCopy, netSentCopy, gpuCopy
 }
 
 func (c *Collector) collect() {
@@ -160,7 +167,6 @@ func (c *Collector) collect() {
 	}
 
 	// CPU Percentages (total and per-core)
-	// Passing 0 duration measures difference since last call
 	if totalPcts, err := cpu.Percent(0, false); err == nil && len(totalPcts) > 0 {
 		snap.CPUTotalPct = totalPcts[0]
 	}
@@ -187,7 +193,6 @@ func (c *Collector) collect() {
 	// Disks
 	if parts, err := disk.Partitions(false); err == nil {
 		for _, p := range parts {
-			// On Windows ignore optical/unmounted drives
 			if strings.HasPrefix(p.Device, "CD-ROM") {
 				continue
 			}
@@ -228,6 +233,9 @@ func (c *Collector) collect() {
 		c.prevNetSent = currentSent
 	}
 
+	// GPUs
+	snap.GPUs = collectGPUs()
+
 	// Processes
 	snap.Processes = c.collectProcesses()
 
@@ -248,6 +256,15 @@ func (c *Collector) collect() {
 	c.netSentHist = append(c.netSentHist, snap.NetBytesSentPerSec)
 	if len(c.netSentHist) > c.historyLimit {
 		c.netSentHist = c.netSentHist[1:]
+	}
+
+	var gpuPct float64
+	if len(snap.GPUs) > 0 {
+		gpuPct = snap.GPUs[0].UtilizationGPU
+	}
+	c.gpuHistory = append(c.gpuHistory, gpuPct)
+	if len(c.gpuHistory) > c.historyLimit {
+		c.gpuHistory = c.gpuHistory[1:]
 	}
 	c.mu.Unlock()
 }
@@ -283,7 +300,6 @@ func (c *Collector) collectProcesses() []ProcessInfo {
 		})
 	}
 
-	// Default sort by CPU descending
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].CPUPercent > res[j].CPUPercent
 	})

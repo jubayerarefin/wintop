@@ -53,6 +53,7 @@ type SystemSnapshotWrapper struct {
 	cpuHistory  []float64
 	netRecvHist []float64
 	netSentHist []float64
+	gpuHistory  []float64
 }
 
 func NewModel(collector *metrics.Collector) Model {
@@ -85,12 +86,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TickMsg:
-		snap, cpuH, netR, netS := m.collector.GetSnapshot()
+		snap, cpuH, netR, netS, gpuH := m.collector.GetSnapshot()
 		m.snapshot = SystemSnapshotWrapper{
 			snap:        snap,
 			cpuHistory:  cpuH,
 			netRecvHist: netR,
 			netSentHist: netS,
+			gpuHistory:  gpuH,
 		}
 		if time.Now().After(m.statusExpiry) {
 			m.statusMsg = ""
@@ -124,19 +126,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "c":
-			// Clear filter
 			m.filterText = ""
 			m.selectedProcIdx = 0
 			m.statusMsg = "Filter cleared"
 			m.statusExpiry = time.Now().Add(2 * time.Second)
 
 		case "s":
-			// Cycle sort column
 			m.sortBy = (m.sortBy + 1) % 4
 			m.selectedProcIdx = 0
 
 		case "r":
-			// Toggle sort ascending/descending
 			m.sortAsc = !m.sortAsc
 			m.selectedProcIdx = 0
 
@@ -226,7 +225,6 @@ func (m Model) View() string {
 		return "Terminal window is too small for wintop. Please enlarge the window."
 	}
 
-	// Calculate sub-dimensions
 	topBarH := 1
 	bottomBarH := 1
 	mainH := m.height - topBarH - bottomBarH - 2
@@ -243,12 +241,34 @@ func (m Model) View() string {
 		rightW = 30
 	}
 
-	// Height breakdown for left column: CPU (40%), Mem & Disks (35%), Net (25%)
-	cpuH := (mainH * 38) / 100
-	memH := (mainH * 35) / 100
-	netH := mainH - cpuH - memH
-	if netH < 5 {
-		netH = 5
+	// Height distribution
+	hasGPU := len(m.snapshot.snap.GPUs) > 0
+	var cpuH, gpuH, memH, netH int
+
+	if hasGPU {
+		cpuH = (mainH * 30) / 100
+		if cpuH < 6 {
+			cpuH = 6
+		}
+		gpuH = (mainH * 24) / 100
+		if gpuH < 5 {
+			gpuH = 5
+		}
+		memH = (mainH * 26) / 100
+		if memH < 6 {
+			memH = 6
+		}
+		netH = mainH - cpuH - gpuH - memH
+		if netH < 4 {
+			netH = 4
+		}
+	} else {
+		cpuH = (mainH * 38) / 100
+		memH = (mainH * 35) / 100
+		netH = mainH - cpuH - memH
+		if netH < 5 {
+			netH = 5
+		}
 	}
 
 	// Render Header
@@ -258,7 +278,15 @@ func (m Model) View() string {
 	cpuBox := m.renderCPUBox(leftW, cpuH)
 	memBox := m.renderMemBox(leftW, memH)
 	netBox := m.renderNetBox(leftW, netH)
-	leftCol := lipgloss.JoinVertical(lipgloss.Left, cpuBox, memBox, netBox)
+
+	var leftBoxes []string
+	leftBoxes = append(leftBoxes, cpuBox)
+	if hasGPU {
+		gpuBox := m.renderGPUBox(leftW, gpuH)
+		leftBoxes = append(leftBoxes, gpuBox)
+	}
+	leftBoxes = append(leftBoxes, memBox, netBox)
+	leftCol := lipgloss.JoinVertical(lipgloss.Left, leftBoxes...)
 
 	// Render Right Column (Processes)
 	procBox := m.renderProcBox(rightW, mainH)

@@ -21,6 +21,7 @@ type Theme struct {
 
 	GraphCPU lipgloss.Color
 	GraphNet lipgloss.Color
+	GraphGPU lipgloss.Color
 
 	MeterGreen  lipgloss.Color
 	MeterYellow lipgloss.Color
@@ -41,6 +42,7 @@ func DefaultTheme() Theme {
 
 		GraphCPU: lipgloss.Color("#50fa7b"), // Green
 		GraphNet: lipgloss.Color("#ff79c6"), // Pink
+		GraphGPU: lipgloss.Color("#ffb86c"), // Orange / Amber
 
 		MeterGreen:  lipgloss.Color("#50fa7b"),
 		MeterYellow: lipgloss.Color("#f1fa8c"),
