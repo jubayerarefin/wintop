@@ -39,13 +39,15 @@ type DiskInfo struct {
 
 // SystemSnapshot contains a point-in-time snapshot of the system.
 type SystemSnapshot struct {
-	Uptime      uint64
-	Hostname    string
-	OSName      string
-	CPUName     string
-	CPUCores    int
-	CPUTotalPct float64
-	CPUCoresPct []float64
+	Uptime        uint64
+	Hostname      string
+	OSName        string
+	CPUName       string
+	CPUCores      int
+	CPUTotalPct   float64
+	CPUCoresPct   []float64
+	CPUPowerWatts float64
+	CPUFanRPM     uint32
 
 	MemTotal       uint64
 	MemUsed        uint64
@@ -78,6 +80,8 @@ type Collector struct {
 	gpuHistory   []float64
 	historyLimit int
 
+	cpuPower *CPUPowerCollector
+
 	prevNetTime time.Time
 	prevNetRecv uint64
 	prevNetSent uint64
@@ -96,6 +100,7 @@ func NewCollector(historyLimit int) *Collector {
 		netRecvHist:  make([]float64, 0, historyLimit),
 		netSentHist:  make([]float64, 0, historyLimit),
 		gpuHistory:   make([]float64, 0, historyLimit),
+		cpuPower:     NewCPUPowerCollector(),
 		stopChan:     make(chan struct{}),
 	}
 }
@@ -125,6 +130,9 @@ func (c *Collector) Stop() {
 	case <-c.stopChan:
 	default:
 		close(c.stopChan)
+		if c.cpuPower != nil {
+			c.cpuPower.Close()
+		}
 	}
 }
 
@@ -176,6 +184,12 @@ func (c *Collector) collect() {
 			snap.CPUCores = len(corePcts)
 		}
 	}
+
+	// CPU Power & Fan RPM
+	if c.cpuPower != nil {
+		snap.CPUPowerWatts = c.cpuPower.QueryPower()
+	}
+	snap.CPUFanRPM = QueryCPUFanRPM()
 
 	// Memory & Swap
 	if vMem, err := mem.VirtualMemory(); err == nil {

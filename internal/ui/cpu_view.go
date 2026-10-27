@@ -22,7 +22,11 @@ func (m Model) renderCPUBox(width, height int) string {
 
 	// Title line
 	title := m.theme.TitleStyle.Render("cpu")
-	cpuName := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(truncate(snap.CPUName, 26))
+	displayName := snap.CPUName
+	displayName = strings.ReplaceAll(displayName, " 8-Core Processor", "")
+	displayName = strings.ReplaceAll(displayName, " Processor", "")
+	cpuName := lipgloss.NewStyle().Foreground(m.theme.TextMuted).Render(truncate(displayName, 22))
+
 	pctColor := m.theme.MeterGreen
 	if snap.CPUTotalPct > 60 {
 		pctColor = m.theme.MeterYellow
@@ -32,7 +36,20 @@ func (m Model) renderCPUBox(width, height int) string {
 	}
 	totalPctStr := lipgloss.NewStyle().Foreground(pctColor).Bold(true).Render(fmt.Sprintf("%5.1f%%", snap.CPUTotalPct))
 
-	header := fmt.Sprintf("%s %s %s", title, cpuName, totalPctStr)
+	var headerParts []string
+	headerParts = append(headerParts, title, cpuName)
+
+	if snap.CPUPowerWatts > 0 {
+		pwrStr := lipgloss.NewStyle().Foreground(m.theme.MeterYellow).Render(fmt.Sprintf("%.1f W", snap.CPUPowerWatts))
+		headerParts = append(headerParts, pwrStr)
+	}
+	if snap.CPUFanRPM > 0 {
+		fanStr := lipgloss.NewStyle().Foreground(m.theme.TextSecondary).Render(fmt.Sprintf("%d RPM", snap.CPUFanRPM))
+		headerParts = append(headerParts, fanStr)
+	}
+	headerParts = append(headerParts, totalPctStr)
+
+	header := strings.Join(headerParts, " ")
 
 	// Available vertical space for content inside box
 	remH := innerH - 1

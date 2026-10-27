@@ -7,10 +7,13 @@ A modern, fast, terminal-based resource and process monitor for Windows written 
 ## ✨ Features
 
 * **100% Pure Go**: No CGO, no Cygwin/WSL dependencies. Native Windows binary.
-* **Direct NVML Hardware Access**: Ultra-fast in-process telemetry via Windows `nvml.dll` with `nvidia-smi` fallback.
+* **Direct Hardware Telemetry**:
+  * **CPU Power (Watts)**: Native Windows PDH RAPL package energy monitoring (`\Energy Meter(*_pkg)\Power`) for real-time package power.
+  * **CPU Fan Speed**: Integrates WMI hardware monitor integration for CPU cooler RPM.
+  * **GPU Telemetry**: Direct in-process Windows `nvml.dll` hardware integration with `nvidia-smi` fallback (processing %, VRAM used/total, fan RPM + %, power watts & limits, temperature).
 * **Braille Canvas Graphs**: High-density 2×4 dot Braille curves (`U+2800`–`U+28FF`) for real-time CPU, GPU, and Network bandwidth monitoring.
 * **Live System Telemetry**:
-  * **CPU**: Overall usage %, per-core real-time mini load bars, and model information.
+  * **CPU**: Overall usage %, per-core real-time mini load bars, **Package Power (Watts)**, Fan Speed (RPM), and model information.
   * **GPU**: GPU Processing / Utilization %, VRAM usage (Used / Total & %), Fan Speed in both **%** and **RPM**, **Power Consumption (Watts & Power Limit)**, Temperature (°C), and real-time Braille workload graph.
   * **Memory & Swap**: Physical RAM usage, Pagefile usage, and Drive-by-drive capacity meters.
   * **Network**: Real-time Download (RX) and Upload (TX) speed calculation with bandwidth history graphs.
@@ -66,16 +69,19 @@ wintop/
 ├── main.go               # Application entrypoint & Bubble Tea lifecycle
 ├── go.mod / go.sum
 └── internal/
-    ├── metrics/          # Windows system, GPU & process collection engine
+    ├── metrics/          # Windows system, CPU, GPU & process collection engine
     │   ├── collector.go      # Multi-threaded polling loop & history buffers
     │   ├── collector_test.go # Windows telemetry verification tests
+    │   ├── cpu_power.go      # Windows PDH Energy Meter RAPL & WMI fan query
+    │   ├── cpu_power_test.go # CPU power collector tests
     │   ├── gpu.go            # Native NVML in-process telemetry (RPM, Watts, VRAM, Util)
     │   └── gpu_test.go       # GPU metrics unit tests
     └── ui/               # Bubble Tea TUI presentation layer
         ├── model.go          # State machine, key handlers & layout manager
         ├── theme.go          # Dracula/Tokyo-Night color palette & progress bars
         ├── braille.go        # 2x4 dot Braille canvas plotting engine
-        ├── cpu_view.go       # CPU box & per-core mini meters
+        ├── cpu_view.go       # CPU box: per-core mini meters, Power (Watts), Fan RPM
+        ├── cpu_test.go       # CPU view tests
         ├── gpu_view.go       # GPU box: VRAM, Fan (RPM + %), Power (W) & Braille graph
         ├── mem_view.go       # RAM, Pagefile & Disk volume meters
         ├── net_view.go       # Network RX/TX rate meters & Braille graph
